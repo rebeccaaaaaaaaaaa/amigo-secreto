@@ -1,0 +1,228 @@
+import { useState, useEffect } from 'react'
+import './App.css'
+
+interface Participant {
+  name: string;
+}
+
+interface DrawResult {
+  giver: string;
+  receiver: string;
+  code: string;
+}
+
+type AppMode = 'setup' | 'codes' | 'reveal';
+
+function App() {
+  const [participants, setParticipants] = useState<Participant[]>([])
+  const [currentName, setCurrentName] = useState('')
+  const [mode, setMode] = useState<AppMode>('setup')
+  const [drawResults, setDrawResults] = useState<DrawResult[]>([])
+  const [inputCode, setInputCode] = useState('')
+  const [revealedResult, setRevealedResult] = useState<string | null>(null)
+  const [revealedPerson, setRevealedPerson] = useState<string | null>(null)
+
+  // Carregar sorteio salvo ao iniciar
+  useEffect(() => {
+    const savedDraw = localStorage.getItem('amigoSecreto')
+    if (savedDraw) {
+      const data = JSON.parse(savedDraw)
+      setDrawResults(data.results)
+      setMode('reveal')
+    }
+  }, [])
+
+  // Gerar código aleatório de 6 caracteres
+  const generateCode = (): string => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Remove letras/números confusos
+    let code = ''
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return code
+  }
+
+  const addParticipant = () => {
+    if (currentName.trim() && !participants.find(p => p.name.toLowerCase() === currentName.toLowerCase())) {
+      setParticipants([...participants, { name: currentName.trim() }])
+      setCurrentName('')
+    }
+  }
+
+  const removeParticipant = (name: string) => {
+    setParticipants(participants.filter(p => p.name !== name))
+  }
+
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const newArray = [...array]
+    for (let i = newArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [newArray[i], newArray[j]] = [newArray[j], newArray[i]]
+    }
+    return newArray
+  }
+
+  const performDraw = () => {
+    if (participants.length < 3) {
+      alert('É necessário no mínimo 3 participantes!')
+      return
+    }
+
+    let validDraw = false
+    let attempts = 0
+    let shuffled: Participant[] = []
+
+    // Tenta criar um sorteio válido (ninguém tira a si mesmo)
+    while (!validDraw && attempts < 100) {
+      shuffled = shuffleArray(participants)
+      validDraw = participants.every((p, index) => p.name !== shuffled[index].name)
+      attempts++
+    }
+
+    if (!validDraw) {
+      alert('Não foi possível realizar o sorteio. Tente novamente.')
+      return
+    }
+
+    const results: DrawResult[] = participants.map((p, index) => ({
+      giver: p.name,
+      receiver: shuffled[index].name
+    }))
+
+    setDrawResults(results)
+    setDrawCompleted(true)
+    setSelectedPerson('')
+    setRevealedResult(null)
+  }
+
+  const revealMyDraw = () => {
+    if (!selectedPerson) {
+      alert('Por favor, selecione seu nome!')
+      return
+    }
+
+    const result = drawResults.find(r => r.giver === selectedPerson)
+    if (result) {
+      setRevealedResult(result.receiver)
+    }
+  }
+
+  const resetDraw = () => {
+    setDrawCompleted(false)
+    setDrawResults([])
+    setSelectedPerson('')
+    setRevealedResult(null)
+  }
+
+  const resetAll = () => {
+    setParticipants([])
+    setCurrentName('')
+    setDrawCompleted(false)
+    setDrawResults([])
+    setSelectedPerson('')
+    setRevealedResult(null)
+  }
+
+  return (
+    <div className="app">
+      <div className="container">
+        <h1>🎁 Amigo Secreto</h1>
+
+        {!drawCompleted ? (
+          <div className="setup-section">
+            <div className="add-participant">
+              <input
+                type="text"
+                value={currentName}
+                onChange={(e) => setCurrentName(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && addParticipant()}
+                placeholder="Digite o nome do participante"
+                className="input-field"
+              />
+              <button onClick={addParticipant} className="btn btn-add">
+                Adicionar
+              </button>
+            </div>
+
+            <div className="participants-list">
+              <h2>Participantes ({participants.length})</h2>
+              {participants.length === 0 ? (
+                <p className="empty-message">Nenhum participante adicionado ainda</p>
+              ) : (
+                <ul>
+                  {participants.map((p) => (
+                    <li key={p.name}>
+                      <span>{p.name}</span>
+                      <button
+                        onClick={() => removeParticipant(p.name)}
+                        className="btn-remove"
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {participants.length >= 3 && (
+              <button onClick={performDraw} className="btn btn-primary">
+                🎲 Realizar Sorteio
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="reveal-section">
+            <div className="info-box">
+              <p>✓ Sorteio realizado com sucesso!</p>
+              <p>Cada pessoa deve selecionar seu nome para ver quem tirou.</p>
+            </div>
+
+            <div className="reveal-controls">
+              <select
+                value={selectedPerson}
+                onChange={(e) => {
+                  setSelectedPerson(e.target.value)
+                  setRevealedResult(null)
+                }}
+                className="select-field"
+              >
+                <option value="">Selecione seu nome</option>
+                {participants.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+
+              {selectedPerson && !revealedResult && (
+                <button onClick={revealMyDraw} className="btn btn-reveal">
+                  👁️ Revelar meu amigo secreto
+                </button>
+              )}
+            </div>
+
+            {revealedResult && (
+              <div className="result-box">
+                <h3>{selectedPerson}, você tirou:</h3>
+                <div className="revealed-name">🎁 {revealedResult}</div>
+                <p className="warning">⚠️ Não conte para ninguém!</p>
+              </div>
+            )}
+
+            <div className="action-buttons">
+              <button onClick={resetDraw} className="btn btn-secondary">
+                Refazer Sorteio
+              </button>
+              <button onClick={resetAll} className="btn btn-secondary">
+                Novo Grupo
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default App
