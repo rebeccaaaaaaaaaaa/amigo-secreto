@@ -23,8 +23,25 @@ function App() {
   const [revealedPerson, setRevealedPerson] = useState<string | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
 
-  // Carregar sorteio salvo ao iniciar
+  // Carregar sorteio ao iniciar (de URL ou localStorage)
   useEffect(() => {
+    // Primeiro tenta carregar da URL (tem prioridade)
+    const urlHash = window.location.hash.substring(1)
+    if (urlHash) {
+      try {
+        const decoded = atob(urlHash)
+        const data = JSON.parse(decoded)
+        setDrawResults(data.results)
+        setMode('reveal')
+        // Salva no localStorage também
+        localStorage.setItem('amigoSecreto', JSON.stringify(data))
+        return
+      } catch (e) {
+        console.error('Erro ao decodificar URL', e)
+      }
+    }
+
+    // Se não tem na URL, tenta carregar do localStorage
     const savedDraw = localStorage.getItem('amigoSecreto')
     if (savedDraw) {
       const data = JSON.parse(savedDraw)
@@ -104,7 +121,12 @@ function App() {
     setDrawResults(results)
     
     // Salvar no localStorage
-    localStorage.setItem('amigoSecreto', JSON.stringify({ results }))
+    const data = { results }
+    localStorage.setItem('amigoSecreto', JSON.stringify(data))
+    
+    // Gerar URL compartilhável
+    const encoded = btoa(JSON.stringify(data))
+    window.location.hash = encoded
     
     setMode('codes')
   }
@@ -138,6 +160,12 @@ function App() {
     alert('Todos os códigos foram copiados!')
   }
 
+  const copyShareLink = () => {
+    const link = window.location.href
+    navigator.clipboard.writeText(link)
+    alert('Link copiado! Compartilhe com os participantes para que cada um possa revelar seu amigo secreto.')
+  }
+
   const printCodes = () => {
     window.print()
   }
@@ -152,6 +180,8 @@ function App() {
       setRevealedResult(null)
       setRevealedPerson(null)
       localStorage.removeItem('amigoSecreto')
+      // Limpar a URL também
+      window.location.hash = ''
     }
   }
 
@@ -184,6 +214,9 @@ function App() {
 
             <div className="participants-list">
               <h2>Participantes ({participants.length})</h2>
+              {participants.length > 0 && participants.length < 3 && (
+                <p className="warning-message">⚠️ Adicione pelo menos {3 - participants.length} participante(s) para realizar o sorteio</p>
+              )}
               {participants.length === 0 ? (
                 <p className="empty-message">Nenhum participante adicionado ainda</p>
               ) : (
@@ -239,6 +272,22 @@ function App() {
               </div>
             </div>
 
+            <div className="share-link-box">
+              <p>🔗 <strong>Compartilhe este link</strong> com todos os participantes:</p>
+              <div className="share-link-container">
+                <input 
+                  type="text" 
+                  value={window.location.href} 
+                  readOnly 
+                  className="share-link-input"
+                  onClick={(e) => e.currentTarget.select()}
+                />
+                <button onClick={copyShareLink} className="btn btn-copy-link">
+                  Copiar Link
+                </button>
+              </div>
+            </div>
+
             <div className="action-buttons">
               <button onClick={copyAllCodes} className="btn btn-secondary">
                 📋 Copiar Todos
@@ -259,6 +308,12 @@ function App() {
           <div className="reveal-section">
             {!revealedResult ? (
               <>
+                <div className="welcome-box">
+                  <h2>Bem-vindo ao Sorteio! 🎁</h2>
+                  <p>Já existe um sorteio ativo. Digite seu código para revelar quem você tirou.</p>
+                  <p>Se você é o organizador e quer <strong>criar um novo sorteio</strong>, clique em "Novo Sorteio" abaixo.</p>
+                </div>
+
                 <div className="info-box">
                   <p>🔐 Digite seu código para descobrir quem você tirou!</p>
                   <p>Cada pessoa deve fazer isso sozinha, sem que ninguém veja.</p>
